@@ -155,9 +155,9 @@ export function createGoogleSheetStore({ spreadsheetId, sheetName = 'MasterData'
       spreadsheetId,
       range: `${quotedSheet}!${cell}`,
       valueInputOption: 'RAW',
-      requestBody: { values: [['Done']] },
+      requestBody: { values: [['done']] },
     });
-    row[nextContactIndex] = 'Done';
+    row[nextContactIndex] = 'done';
     return mappedClient(headers, row);
   }
 

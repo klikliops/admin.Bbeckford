@@ -422,7 +422,7 @@ async function completeFollowUpInWorkbook(filePath, clientId) {
   const archive = unzipSync(new Uint8Array(await readFile(filePath)));
   const masterPath = worksheetPaths(archive).get(MASTER_SHEET);
   if (!masterPath) throw new Error('Could not find the MasterData worksheet in the workbook.');
-  updateWorksheetCells(archive, masterPath, rowNumber, [[nextContactColumn, 'Done']]);
+  updateWorksheetCells(archive, masterPath, rowNumber, [[nextContactColumn, 'done']]);
   await replaceWorkbookFile(filePath, archive);
   return (await readClients(filePath)).find((client) => client.id === clientId);
 }

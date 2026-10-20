@@ -9,6 +9,16 @@ function parseDateFormula(value) {
   return match ? `=DATE(${Number(match[1])},${Number(match[2])},${Number(match[3])})` : '';
 }
 
+function columnLetters(index) {
+  let letters = '';
+  while (index > 0) {
+    const remainder = (index - 1) % 26;
+    letters = String.fromCharCode(65 + remainder) + letters;
+    index = Math.floor((index - 1) / 26);
+  }
+  return letters;
+}
+
 function mappedClient(headers, values) {
   const record = Object.fromEntries(headers.map((header, index) => [header, values[index] ?? '']));
   const client = mapMasterData(record);
@@ -128,10 +138,38 @@ export function createGoogleSheetStore({ spreadsheetId, sheetName = 'MasterData'
     };
   }
 
+  async function completeFollowUp(clientId) {
+    const { sheets, headers, rows } = await getRows();
+    const idIndex = headers.findIndex((header) => normalize(header) === normalize('ID No.'));
+    const nextContactIndex = headers.findIndex((header) => normalize(header) === normalize('Next date of Contact'));
+    const rowIndex = rows.findIndex((row) => String(row[idIndex] ?? '') === clientId);
+    if (rowIndex < 0) throw new Error('Client not found.');
+    const row = rows[rowIndex];
+    const scheduledDate = String(row[nextContactIndex] ?? '').trim();
+    if (!scheduledDate) throw new Error('This client has no scheduled follow-up to complete.');
+    if (normalize(scheduledDate) === 'done') throw new Error('This follow-up is already marked done.');
+
+    const rowNumber = rowIndex + 2;
+    const cell = `${columnLetters(nextContactIndex + 1)}${rowNumber}`;
+    await sheets.spreadsheets.values.update({
+      spreadsheetId,
+      range: `${quotedSheet}!${cell}`,
+      valueInputOption: 'RAW',
+      requestBody: { values: [['Done']] },
+    });
+    row[nextContactIndex] = 'Done';
+    return mappedClient(headers, row);
+  }
+
   return {
     list,
     add(input) {
       const operation = queuedWrite.then(() => appendClient(input));
+      queuedWrite = operation.catch(() => {});
+      return operation;
+    },
+    completeFollowUp(clientId) {
+      const operation = queuedWrite.then(() => completeFollowUp(clientId));
       queuedWrite = operation.catch(() => {});
       return operation;
     },

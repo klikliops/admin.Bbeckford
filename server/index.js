@@ -72,6 +72,20 @@ app.use('/api', (request, response, next) => {
   return response.status(401).json({ error: 'Sign in to access client records.' });
 });
 
+app.post('/api/clients/:clientId/follow-up/done', async (request, response, next) => {
+  try {
+    const client = await store.completeFollowUp(request.params.clientId);
+    const modifiedAt = useGoogleSheets ? new Date().toISOString() : (await stat(workbookPath)).mtime.toISOString();
+    response.json({ client, modifiedAt, source: sourceName });
+  } catch (error) {
+    if (error.message === 'Client not found.') return response.status(404).json({ error: error.message });
+    if (error.message.includes('scheduled follow-up') || error.message.includes('already marked done')) {
+      return response.status(409).json({ error: error.message });
+    }
+    next(error);
+  }
+});
+
 app.get('/api/clients', async (_request, response, next) => {
   try {
     const clients = await store.list();

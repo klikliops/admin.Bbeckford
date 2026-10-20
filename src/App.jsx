@@ -51,6 +51,7 @@ function dateValue(value) {
 }
 
 function formatDate(value, options = { month: 'short', day: 'numeric', year: 'numeric' }) {
+  if (String(value || '').trim().toLowerCase() === 'done') return 'Done';
   const parsed = dateValue(value);
   return parsed ? new Intl.DateTimeFormat('en-US', { timeZone: 'UTC', ...options }).format(parsed) : '—';
 }
@@ -287,33 +288,39 @@ function ClientDetails({ client, onClose }) {
   );
 }
 
-function Dashboard({ clients, onShowClients, onSelectClient, now }) {
+function Dashboard({ clients, onShowClients, onSelectClient, onCompleteFollowUp, now }) {
   const today = centralDateKey(now);
   const dueClients = useMemo(() => clients
     .map((client) => ({ ...client, dueIn: daysUntil(client.nextContactDate, today) }))
-    .filter((client) => client.dueIn !== null)
+    .filter((client) => client.dueIn !== null && client.dueIn >= 0)
     .sort((left, right) => left.dueIn - right.dueIn), [clients, today]);
-  const overdue = dueClients.filter((client) => client.dueIn < 0).length;
-  const dueSoon = dueClients.filter((client) => client.dueIn >= 0 && client.dueIn <= 7).length;
+  const dueSoon = dueClients.filter((client) => client.dueIn <= 7).length;
   const pendingPayments = clients.filter((client) => client.paymentStatus.toLowerCase() === 'pending').length;
   const nextFollowUp = dueClients.find((client) => client.dueIn >= 0) || null;
   const frequencyCounts = frequencies.map((frequency) => ({ frequency, count: clients.filter((client) => client.frequency.toLowerCase() === frequency.toLowerCase()).length }));
   const maxFrequency = Math.max(...frequencyCounts.map((item) => item.count), 1);
   const nextClients = dueClients.slice(0, 6);
+  const [completingId, setCompletingId] = useState('');
+
+  async function complete(client) {
+    setCompletingId(client.id);
+    await onCompleteFollowUp(client);
+    setCompletingId('');
+  }
 
   return (
     <>
       <div className="welcome-row"><div><span className="eyebrow">{new Intl.DateTimeFormat('en-US', { timeZone: CENTRAL_TIME_ZONE, weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }).format(now).toUpperCase()}</span><h1>{greeting(now)}.</h1><p className="page-subtitle">Here’s the client overview.</p></div><button className="button button-secondary" onClick={onShowClients}>View all clients <ArrowRight size={16} /></button></div>
       <div className="metric-grid">
         <Metric label="Total clients" value={clients.length} note="In MasterData" tone="green" icon={UsersRound} />
-        <Metric label="Follow-ups due" value={overdue + dueSoon} note={`${overdue} overdue · ${dueSoon} in the next 7 days`} tone="amber" icon={CalendarClock} />
+        <Metric label="Upcoming this week" value={dueSoon} note="Scheduled in the next 7 days" tone="amber" icon={CalendarClock} />
         <Metric label="Payments pending" value={pendingPayments} note={`${clients.length ? Math.round((pendingPayments / clients.length) * 100) : 0}% of client roster`} tone="rose" icon={CreditCard} />
         <Metric label="Next follow-up" value={nextFollowUp ? formatDate(nextFollowUp.nextContactDate, { month: 'short', day: 'numeric' }) : '—'} note={nextFollowUp?.name || 'No upcoming follow-up'} tone="blue" icon={CalendarClock} />
       </div>
       <div className="dashboard-grid">
         <section className="surface followup-surface">
           <div className="section-heading"><div><span className="eyebrow">CLIENT CARE</span><h2>Next follow-ups</h2></div><button className="text-button" onClick={onShowClients}>All clients <ArrowRight size={15} /></button></div>
-          {nextClients.length ? <div className="followup-list">{nextClients.map((client) => <button className="followup-row" key={client.id || client.email} onClick={() => onSelectClient(client)}><span className={`due-marker ${client.dueIn < 0 ? 'due-overdue' : ''}`}><CalendarClock size={17} /></span><span className="followup-person"><strong>{client.name}</strong><small>{client.email || client.frequency || 'No contact details'}</small></span><span className={`due-date ${client.dueIn < 0 ? 'text-overdue' : ''}`}>{client.dueIn < 0 ? `${Math.abs(client.dueIn)}d overdue` : client.dueIn === 0 ? 'Today' : `In ${client.dueIn}d`}<small>{formatDate(client.nextContactDate, { month: 'short', day: 'numeric' })}</small></span><ArrowRight className="row-arrow" size={15} /></button>)}</div> : <div className="empty-state"><CalendarClock size={22} /><p>No follow-up dates recorded yet.</p></div>}
+          {nextClients.length ? <div className="followup-list">{nextClients.map((client) => <div className="followup-row" key={client.id || client.email}><button className="followup-open" onClick={() => onSelectClient(client)}><span className="due-marker"><CalendarClock size={17} /></span><span className="followup-person"><strong>{client.name}</strong><small>{client.email || client.frequency || 'No contact details'}</small></span><span className="due-date">{client.dueIn === 0 ? 'Today' : `In ${client.dueIn}d`}<small>{formatDate(client.nextContactDate, { month: 'short', day: 'numeric' })}</small></span><ArrowRight className="row-arrow" size={15} /></button><button className="followup-done" onClick={() => complete(client)} disabled={completingId === client.id} aria-label={`Mark follow-up done for ${client.name}`}><Check size={14} /><span>{completingId === client.id ? 'Saving…' : 'Done'}</span></button></div>)}</div> : <div className="empty-state"><CalendarClock size={22} /><p>No upcoming follow-ups.</p></div>}
         </section>
         <section className="surface frequency-surface">
           <div className="section-heading"><div><span className="eyebrow">ROSTER MIX</span><h2>Meeting frequency</h2></div><span className="small-count">{clients.length} total</span></div>
@@ -509,6 +516,21 @@ export default function App() {
     }
   }
 
+  async function completeFollowUp(client) {
+    try {
+      const response = await fetch(`/api/clients/${encodeURIComponent(client.id)}/follow-up/done`, { method: 'POST' });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Could not mark this follow-up done.');
+      setClients((current) => current.map((item) => item.id === client.id ? result.client : item));
+      setLastUpdated(result.modifiedAt);
+      setDataSource(result.source || dataSource);
+      setLoadError('');
+      setToast(`${client.name} follow-up marked done`);
+    } catch (error) {
+      setLoadError(error.message);
+    }
+  }
+
   function createdClient(result) {
     setClients((current) => [...current, result.client].sort((left, right) => left.name.localeCompare(right.name)));
     setLastUpdated(result.modifiedAt);
@@ -542,7 +564,7 @@ export default function App() {
         <div className="page-content">
           {loadError && <div className="load-error" role="alert"><span>{loadError}</span><button onClick={refreshWorkbook}>Retry <RefreshCw size={14} /></button></div>}
           {page === 'dashboard'
-            ? <Dashboard clients={clients} now={new Date()} onShowClients={() => setPage('clients')} onSelectClient={setSelectedClient} />
+            ? <Dashboard clients={clients} now={new Date()} onShowClients={() => setPage('clients')} onSelectClient={setSelectedClient} onCompleteFollowUp={completeFollowUp} />
             : <ClientList clients={clients} search={search} onSearch={setSearch} onSelectClient={setSelectedClient} />}
           <footer className="page-footer"><span><i className="sync-dot" /> {dataSource} connection active</span><span>{dataSource === 'Google Sheets' ? 'Sheet checked every 20 seconds' : 'Workbook checked every 20 seconds'}</span></footer>
         </div>

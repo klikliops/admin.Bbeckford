@@ -227,6 +227,82 @@ function appendWorksheetRow(zip, worksheetPath, rowValues) {
   zip[worksheetPath] = strToU8(new XMLSerializer().serializeToString(document));
 }
 
+function makeEmptyCell(document, column, rowNumber, style) {
+  const cell = document.createElementNS(MAIN_NS, 'c');
+  cell.setAttribute('r', `${columnName(column)}${rowNumber}`);
+  if (style) cell.setAttribute('s', style);
+  return cell;
+}
+
+function updateWorksheetCells(zip, worksheetPath, rowNumber, values) {
+  const document = new DOMParser().parseFromString(strFromU8(zip[worksheetPath]), 'application/xml');
+  const sheetData = document.getElementsByTagNameNS(MAIN_NS, 'sheetData').item(0);
+  const rows = sheetData?.getElementsByTagNameNS(MAIN_NS, 'row');
+  let row;
+  let previousRow;
+  for (let index = 0; rows && index < rows.length; index += 1) {
+    const currentRow = rows.item(index);
+    const currentNumber = Number(currentRow.getAttribute('r'));
+    if (currentNumber === rowNumber) row = currentRow;
+    if (currentNumber === rowNumber - 1) previousRow = currentRow;
+  }
+  if (!row) throw new Error(`Client row ${rowNumber} was not found in MasterData.`);
+
+  for (const [column, value] of values) {
+    const reference = `${columnName(column)}${rowNumber}`;
+    const existingCells = row.getElementsByTagNameNS(MAIN_NS, 'c');
+    let existingCell;
+    let style;
+    for (let index = 0; index < existingCells.length; index += 1) {
+      if (existingCells.item(index).getAttribute('r') === reference) existingCell = existingCells.item(index);
+    }
+    style = existingCell?.getAttribute('s');
+    if (!style) {
+      const previousCells = previousRow?.getElementsByTagNameNS(MAIN_NS, 'c');
+      for (let index = 0; previousCells && index < previousCells.length; index += 1) {
+        if (previousCells.item(index).getAttribute('r') === `${columnName(column)}${rowNumber - 1}`) {
+          style = previousCells.item(index).getAttribute('s');
+        }
+      }
+    }
+
+    const replacement = value === ''
+      ? makeEmptyCell(document, column, rowNumber, style)
+      : makeCell(document, column, rowNumber, value, style);
+    if (existingCell) {
+      row.replaceChild(replacement, existingCell);
+      continue;
+    }
+
+    const cells = row.getElementsByTagNameNS(MAIN_NS, 'c');
+    let nextCell;
+    for (let index = 0; index < cells.length; index += 1) {
+      const currentColumn = Number(cells.item(index).getAttribute('r').match(/^[A-Z]+/)?.[0]
+        .split('').reduce((total, letter) => total * 26 + letter.charCodeAt(0) - 64, 0));
+      if (currentColumn > column) {
+        nextCell = cells.item(index);
+        break;
+      }
+    }
+    row.insertBefore(replacement, nextCell);
+  }
+  zip[worksheetPath] = strToU8(new XMLSerializer().serializeToString(document));
+}
+
+async function replaceWorkbookFile(filePath, archive) {
+  const temporaryPath = join(dirname(filePath), `.case-management-${process.pid}-${Date.now()}.xlsx`);
+  await writeFile(temporaryPath, zipSync(archive, { level: 6 }));
+  try {
+    await rename(temporaryPath, filePath);
+  } catch (error) {
+    await unlink(temporaryPath).catch(() => {});
+    if (error.code === 'EPERM' || error.code === 'EACCES') {
+      throw new Error('The workbook is locked by Excel or another process. Close it, then try again.');
+    }
+    throw error;
+  }
+}
+
 function worksheetPaths(zip) {
   const parser = new DOMParser();
   const workbook = parser.parseFromString(strFromU8(zip['xl/workbook.xml']), 'application/xml');
@@ -326,11 +402,41 @@ async function addClientToWorkbook(filePath, input) {
   };
 }
 
+async function completeFollowUpInWorkbook(filePath, clientId) {
+  const workbook = await loadWorkbook(filePath);
+  const master = workbook.getWorksheet(MASTER_SHEET);
+  if (!master) throw new Error('The workbook must contain a MasterData sheet.');
+  const idColumn = findColumn(master, 'ID No.');
+  const nextContactColumn = findColumn(master, 'Next date of Contact');
+  let rowNumber = 0;
+  for (let currentRow = HEADER_ROW + 1; currentRow <= master.actualRowCount; currentRow += 1) {
+    if (cellText(master.getRow(currentRow).getCell(idColumn)) === clientId) rowNumber = currentRow;
+  }
+  if (!rowNumber) throw new Error('Client not found.');
+  const scheduledDate = cellText(master.getRow(rowNumber).getCell(nextContactColumn));
+  if (!scheduledDate) {
+    throw new Error('This client has no scheduled follow-up to complete.');
+  }
+  if (normalize(scheduledDate) === 'done') throw new Error('This follow-up is already marked done.');
+
+  const archive = unzipSync(new Uint8Array(await readFile(filePath)));
+  const masterPath = worksheetPaths(archive).get(MASTER_SHEET);
+  if (!masterPath) throw new Error('Could not find the MasterData worksheet in the workbook.');
+  updateWorksheetCells(archive, masterPath, rowNumber, [[nextContactColumn, 'Done']]);
+  await replaceWorkbookFile(filePath, archive);
+  return (await readClients(filePath)).find((client) => client.id === clientId);
+}
+
 export function createWorkbookStore(filePath) {
   return {
     list: () => readClients(filePath),
     add: (input) => {
       const operation = writeQueue.then(() => addClientToWorkbook(filePath, input));
+      writeQueue = operation.catch(() => {});
+      return operation;
+    },
+    completeFollowUp(clientId) {
+      const operation = writeQueue.then(() => completeFollowUpInWorkbook(filePath, clientId));
       writeQueue = operation.catch(() => {});
       return operation;
     },

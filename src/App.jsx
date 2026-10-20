@@ -14,6 +14,7 @@ import {
   LockKeyhole,
   LogOut,
   Menu,
+  Pencil,
   Plus,
   RefreshCw,
   Search,
@@ -264,25 +265,103 @@ function ClientForm({ onClose, onCreated }) {
   );
 }
 
-function ClientDetails({ client, onClose }) {
-  const fields = [
-    ['Client ID', client.id], ['Email', client.email], ['Phone', client.phone],
-    ['Meeting frequency', client.frequency], ['Translator needed', client.translator],
-    ['Date onboarded', formatDate(client.onboardingDate)], ['Date of interview', formatDate(client.interviewDate)],
-    ['Date contacted', formatDate(client.lastContactDate)], ['Outcome', client.outcome],
-    ['Next date of contact', formatDate(client.nextContactDate)], ['Last date with attorney', formatDate(client.lastAttorneyDate)],
-    ['Payment status', client.paymentStatus],
-  ];
+function editValues(client) {
+  return {
+    name: client.name || '',
+    email: client.email || '',
+    phone: client.phone || '',
+    translator: client.translator || 'No',
+    onboardingDate: client.onboardingDate || '',
+    frequency: client.frequency || frequencies[0],
+    interviewDate: client.interviewDate || '',
+    lastContactDate: client.lastContactDate || '',
+    outcome: client.outcome || '',
+    nextContactDate: client.nextContactDate || '',
+    lastAttorneyDate: client.lastAttorneyDate || '',
+    paymentStatus: client.paymentStatus || 'Pending',
+    notes: client.notes || '',
+  };
+}
+
+function ClientDetails({ client, onClose, onUpdate }) {
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const [form, setForm] = useState(() => editValues(client));
+  const update = (event) => setForm((current) => ({ ...current, [event.target.name]: event.target.value }));
+
+  useEffect(() => {
+    if (!editing) setForm(editValues(client));
+  }, [client, editing]);
+
+  async function save(event) {
+    event.preventDefault();
+    setSaving(true);
+    setError('');
+    try {
+      const updated = await onUpdate(client, form);
+      setForm(editValues(updated));
+      setEditing(false);
+    } catch (saveError) {
+      setError(saveError.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function cancel() {
+    setError('');
+    setForm(editValues(client));
+    setEditing(false);
+  }
+
+  const frequencyOptions = [...new Set([form.frequency, ...frequencies].filter(Boolean))];
+  const outcomeOptions = [...new Set([form.outcome, 'Responsive', 'Unresponsive'].filter(Boolean))];
   return (
     <div className="overlay" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
       <section className="drawer detail-drawer" role="dialog" aria-modal="true" aria-labelledby="client-name">
         <div className="drawer-header">
           <div><span className="eyebrow">CLIENT RECORD · {client.id || 'NO ID'}</span><h2 id="client-name">{client.name}</h2></div>
-          <button className="icon-button" onClick={onClose} aria-label="Close client details"><X size={18} /></button>
+          <div className="detail-actions">
+            {editing ? <><button className="button button-secondary" type="button" onClick={cancel} disabled={saving}>Cancel</button><button className="button button-primary" type="submit" form="edit-client-form" disabled={saving}><Check size={15} />{saving ? 'Saving…' : 'Save'}</button></> : <button className="button button-secondary" type="button" onClick={() => setEditing(true)}><Pencil size={15} />Edit</button>}
+            <button className="icon-button" onClick={onClose} aria-label="Close client details"><X size={18} /></button>
+          </div>
         </div>
-        <div className="detail-status"><Status value={client.paymentStatus} /><span className="detail-frequency">{client.frequency || 'Frequency not set'}</span></div>
-        <dl className="detail-grid">{fields.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value || '—'}</dd></div>)}</dl>
-        <section className="detail-notes"><h3>Notes</h3><p>{client.notes || 'No notes recorded.'}</p></section>
+        {editing ? <form id="edit-client-form" className="edit-client-form" onSubmit={save}>
+          <div className="detail-status"><span className="eyebrow">EDIT CLIENT · {client.id}</span></div>
+          <div className="form-grid detail-edit-grid">
+            <label className="field field-wide">Client name<input name="name" value={form.name} onChange={update} required maxLength={120} /></label>
+            <label className="field">Email<input name="email" type="email" value={form.email} onChange={update} maxLength={180} /></label>
+            <label className="field">Phone<input name="phone" value={form.phone} onChange={update} maxLength={40} /></label>
+            <label className="field">Meeting frequency<select name="frequency" value={form.frequency} onChange={update}>{frequencyOptions.map((frequency) => <option key={frequency}>{frequency}</option>)}</select><ChevronDown size={15} /></label>
+            <label className="field">Translator needed<select name="translator" value={form.translator} onChange={update}><option>No</option><option>Yes</option></select><ChevronDown size={15} /></label>
+            <label className="field">Date onboarded<input type="date" name="onboardingDate" value={form.onboardingDate} onChange={update} /></label>
+            <label className="field">Date of interview<input type="date" name="interviewDate" value={form.interviewDate} onChange={update} /></label>
+            <label className="field">Date contacted<input type="date" name="lastContactDate" value={form.lastContactDate} onChange={update} /></label>
+            <label className="field">Next date of contact<input type={form.nextContactDate.toLowerCase() === 'done' ? 'text' : 'date'} name="nextContactDate" value={form.nextContactDate.toLowerCase() === 'done' ? 'done' : form.nextContactDate} onChange={update} /><span className="field-hint">Enter a date or type done.</span></label>
+            <label className="field">Last date with attorney<input type="date" name="lastAttorneyDate" value={form.lastAttorneyDate} onChange={update} /></label>
+            <label className="field">Outcome<select name="outcome" value={form.outcome} onChange={update}><option value="">Not set</option>{outcomeOptions.map((outcome) => <option key={outcome}>{outcome}</option>)}</select><ChevronDown size={15} /></label>
+            <label className="field">Payment status<select name="paymentStatus" value={form.paymentStatus} onChange={update}><option>Pending</option><option>Up to Date</option></select><ChevronDown size={15} /></label>
+            <label className="field field-wide">Notes<textarea name="notes" value={form.notes} onChange={update} rows={4} maxLength={2000} /></label>
+          </div>
+          {error && <div className="form-error" role="alert">{error}</div>}
+        </form> : <>
+          <div className="detail-status"><Status value={client.paymentStatus} /><span className="detail-frequency">{client.frequency || 'Frequency not set'}</span></div>
+          <dl className="detail-grid">
+            <div><dt>Client ID</dt><dd>{client.id || '—'}</dd></div>
+            <div><dt>Email</dt><dd>{client.email || '—'}</dd></div>
+            <div><dt>Phone</dt><dd>{client.phone || '—'}</dd></div>
+            <div><dt>Translator needed</dt><dd>{client.translator || '—'}</dd></div>
+            <div><dt>Date onboarded</dt><dd>{formatDate(client.onboardingDate)}</dd></div>
+            <div><dt>Date of interview</dt><dd>{formatDate(client.interviewDate)}</dd></div>
+            <div><dt>Date contacted</dt><dd>{formatDate(client.lastContactDate)}</dd></div>
+            <div><dt>Outcome</dt><dd>{client.outcome || '—'}</dd></div>
+            <div><dt>Next date of contact</dt><dd>{formatDate(client.nextContactDate)}</dd></div>
+            <div><dt>Last date with attorney</dt><dd>{formatDate(client.lastAttorneyDate)}</dd></div>
+            <div><dt>Payment status</dt><dd>{client.paymentStatus || '—'}</dd></div>
+          </dl>
+          <section className="detail-notes"><h3>Notes</h3><p>{client.notes || 'No notes recorded.'}</p></section>
+        </>}
       </section>
     </div>
   );
@@ -531,6 +610,22 @@ export default function App() {
     }
   }
 
+  async function updateClient(client, changes) {
+    const response = await fetch(`/api/clients/${encodeURIComponent(client.id)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(changes),
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || 'Could not update this client.');
+    setClients((current) => current.map((item) => item.id === client.id ? result.client : item));
+    setSelectedClient(result.client);
+    setLastUpdated(result.modifiedAt);
+    setDataSource(result.source || dataSource);
+    setToast(`${result.client.name} updated`);
+    return result.client;
+  }
+
   function createdClient(result) {
     setClients((current) => [...current, result.client].sort((left, right) => left.name.localeCompare(right.name)));
     setLastUpdated(result.modifiedAt);
@@ -570,7 +665,7 @@ export default function App() {
         </div>
       </main>
       {intakeOpen && <ClientForm onClose={() => setIntakeOpen(false)} onCreated={createdClient} />}
-      {selectedClient && <ClientDetails client={selectedClient} onClose={() => setSelectedClient(null)} />}
+      {selectedClient && <ClientDetails client={selectedClient} onClose={() => setSelectedClient(null)} onUpdate={updateClient} />}
       {toast && <div className="toast"><span><Check size={15} /></span>{toast}</div>}
     </div>
   );

@@ -402,6 +402,49 @@ async function addClientToWorkbook(filePath, input) {
   };
 }
 
+async function updateClientInWorkbook(filePath, clientId, input) {
+  const workbook = await loadWorkbook(filePath);
+  const master = workbook.getWorksheet(MASTER_SHEET);
+  if (!master) throw new Error('The workbook must contain a MasterData sheet.');
+  const idColumn = findColumn(master, 'ID No.');
+  let rowNumber = 0;
+  for (let currentRow = HEADER_ROW + 1; currentRow <= master.actualRowCount; currentRow += 1) {
+    if (cellText(master.getRow(currentRow).getCell(idColumn)) === clientId) rowNumber = currentRow;
+  }
+  if (!rowNumber) throw new Error('Client not found.');
+
+  const email = String(input.email ?? '').trim();
+  if (email && (await readClients(filePath)).some((client) => client.id !== clientId && normalize(client.email) === normalize(email))) {
+    throw new Error('A client with this email already exists.');
+  }
+  const nextContact = String(input.nextContactDate ?? '').trim();
+  const nextContactValue = normalize(nextContact) === 'done' ? 'done' : dateFromInput(nextContact) || '';
+  if (nextContact && !nextContactValue) throw new Error('Next contact must be a date or done.');
+
+  const values = [
+    ['Client Name', String(input.name ?? '').trim()],
+    ['Email', email],
+    ['PHONE', String(input.phone ?? '').trim()],
+    ['Translator Needed', String(input.translator ?? '').trim()],
+    ['Date Onboarded', dateFromInput(input.onboardingDate) || ''],
+    ['Meeting Frequency', String(input.frequency ?? '').trim()],
+    ['Date of Interview', dateFromInput(input.interviewDate) || ''],
+    ['Date Contacted', dateFromInput(input.lastContactDate) || ''],
+    ['Outcome ', String(input.outcome ?? '').trim()],
+    ['Next date of Contact', nextContactValue],
+    ['Last Date With Attorney', dateFromInput(input.lastAttorneyDate) || ''],
+    ['Payment Status', String(input.paymentStatus ?? '').trim()],
+    ['NOTES', String(input.notes ?? '').trim()],
+  ].map(([header, value]) => [findColumn(master, header), value]).filter(([column]) => column);
+
+  const archive = unzipSync(new Uint8Array(await readFile(filePath)));
+  const masterPath = worksheetPaths(archive).get(MASTER_SHEET);
+  if (!masterPath) throw new Error('Could not find the MasterData worksheet in the workbook.');
+  updateWorksheetCells(archive, masterPath, rowNumber, values);
+  await replaceWorkbookFile(filePath, archive);
+  return (await readClients(filePath)).find((client) => client.id === clientId);
+}
+
 async function completeFollowUpInWorkbook(filePath, clientId) {
   const workbook = await loadWorkbook(filePath);
   const master = workbook.getWorksheet(MASTER_SHEET);
@@ -437,6 +480,11 @@ export function createWorkbookStore(filePath) {
     },
     completeFollowUp(clientId) {
       const operation = writeQueue.then(() => completeFollowUpInWorkbook(filePath, clientId));
+      writeQueue = operation.catch(() => {});
+      return operation;
+    },
+    update(clientId, input) {
+      const operation = writeQueue.then(() => updateClientInWorkbook(filePath, clientId, input));
       writeQueue = operation.catch(() => {});
       return operation;
     },

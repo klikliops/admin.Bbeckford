@@ -130,6 +130,56 @@ app.post('/api/clients', async (request, response, next) => {
   }
 });
 
+app.put('/api/clients/:clientId', async (request, response, next) => {
+  try {
+    const input = request.body || {};
+    const name = String(input.name || '').trim();
+    const email = String(input.email || '').trim();
+    if (!name) return response.status(400).json({ error: 'Client name is required.' });
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return response.status(400).json({ error: 'Enter a valid email address.' });
+    }
+    const dates = [
+      input.onboardingDate,
+      input.interviewDate,
+      input.lastContactDate,
+      input.lastAttorneyDate,
+    ].filter(Boolean);
+    if (dates.some((value) => !/^\d{4}-\d{2}-\d{2}$/.test(String(value)))) {
+      return response.status(400).json({ error: 'Enter dates in the expected calendar format.' });
+    }
+    const nextContactDate = String(input.nextContactDate || '').trim();
+    if (nextContactDate && nextContactDate.toLowerCase() !== 'done' && !/^\d{4}-\d{2}-\d{2}$/.test(nextContactDate)) {
+      return response.status(400).json({ error: 'Next contact must be a date or done.' });
+    }
+    const notes = String(input.notes || '').trim();
+    if (notes.length > 2000) return response.status(400).json({ error: 'Notes must be 2,000 characters or fewer.' });
+
+    const client = await store.update(request.params.clientId, {
+      name,
+      email,
+      phone: String(input.phone || '').trim(),
+      frequency: String(input.frequency || '').trim(),
+      translator: String(input.translator || '').trim(),
+      onboardingDate: String(input.onboardingDate || '').trim(),
+      interviewDate: String(input.interviewDate || '').trim(),
+      lastContactDate: String(input.lastContactDate || '').trim(),
+      outcome: String(input.outcome || '').trim(),
+      nextContactDate,
+      lastAttorneyDate: String(input.lastAttorneyDate || '').trim(),
+      paymentStatus: String(input.paymentStatus || '').trim(),
+      notes,
+    });
+    const modifiedAt = useGoogleSheets ? new Date().toISOString() : (await stat(workbookPath)).mtime.toISOString();
+    response.json({ client, modifiedAt, source: sourceName });
+  } catch (error) {
+    if (error.message === 'Client not found.') return response.status(404).json({ error: error.message });
+    if (error.message.includes('already exists')) return response.status(409).json({ error: error.message });
+    if (error.message.includes('locked by Excel')) return response.status(423).json({ error: error.message });
+    next(error);
+  }
+});
+
 if (process.env.NODE_ENV === 'production') {
   const dist = resolve(root, 'dist');
   app.use(express.static(dist));

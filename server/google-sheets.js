@@ -9,6 +9,11 @@ function parseDateFormula(value) {
   return match ? `=DATE(${Number(match[1])},${Number(match[2])},${Number(match[3])})` : '';
 }
 
+function safeUserText(value) {
+  const text = String(value ?? '').trim();
+  return /^[=+\-@]/.test(text) ? `'${text}` : text;
+}
+
 function columnLetters(index) {
   let letters = '';
   while (index > 0) {
@@ -161,6 +166,70 @@ export function createGoogleSheetStore({ spreadsheetId, sheetName = 'MasterData'
     return mappedClient(headers, row);
   }
 
+  async function updateClient(clientId, input) {
+    const { sheets, headers, rows } = await getRows();
+    const indexes = new Map(headers.map((header, index) => [normalize(header), index]));
+    const idIndex = indexes.get(normalize('ID No.'));
+    const rowIndex = rows.findIndex((row) => String(row[idIndex] ?? '') === clientId);
+    if (rowIndex < 0) throw new Error('Client not found.');
+
+    const email = String(input.email ?? '').trim();
+    if (email && rows.some((row, index) => index !== rowIndex && normalize(row[indexes.get(normalize('Email'))]) === normalize(email))) {
+      throw new Error('A client with this email already exists.');
+    }
+    const nextContact = String(input.nextContactDate ?? '').trim();
+    const nextContactValue = normalize(nextContact) === 'done' ? 'done' : parseDateFormula(nextContact);
+    if (nextContact && !nextContactValue) throw new Error('Next contact must be a date or done.');
+
+    const updates = [];
+    const put = (header, value, isFormula = false) => {
+      const columnIndex = indexes.get(normalize(header));
+      if (columnIndex === undefined) return;
+      const cell = `${columnLetters(columnIndex + 1)}${rowIndex + 2}`;
+      updates.push({
+        range: `${quotedSheet}!${cell}`,
+        values: [[isFormula ? value : safeUserText(value)]],
+      });
+    };
+    const putDate = (header, value) => put(header, parseDateFormula(value), true);
+
+    put('Client Name', input.name);
+    put('Email', email);
+    put('PHONE', input.phone);
+    put('Translator Needed', input.translator);
+    putDate('Date Onboarded', input.onboardingDate);
+    put('Meeting Frequency', input.frequency);
+    putDate('Date of Interview', input.interviewDate);
+    putDate('Date Contacted', input.lastContactDate);
+    put('Outcome ', input.outcome);
+    put('Next date of Contact', nextContactValue, normalize(nextContact) !== 'done');
+    putDate('Last Date With Attorney', input.lastAttorneyDate);
+    put('Payment Status', input.paymentStatus);
+    put('NOTES', input.notes);
+
+    await sheets.spreadsheets.values.batchUpdate({
+      spreadsheetId,
+      valueInputOption: 'USER_ENTERED',
+      requestBody: { data: updates },
+    });
+
+    const updatedRow = [...rows[rowIndex]];
+    for (const update of updates) {
+      const column = update.range.match(/!([A-Z]+)/)?.[1];
+      const index = [...column].reduce((total, letter) => total * 26 + letter.charCodeAt(0) - 64, 0) - 1;
+      updatedRow[index] = update.values[0][0];
+    }
+    const updatedClient = mappedClient(headers, updatedRow);
+    return {
+      ...updatedClient,
+      onboardingDate: String(input.onboardingDate ?? ''),
+      interviewDate: String(input.interviewDate ?? ''),
+      lastContactDate: String(input.lastContactDate ?? ''),
+      nextContactDate: normalize(nextContact) === 'done' ? 'done' : nextContact,
+      lastAttorneyDate: String(input.lastAttorneyDate ?? ''),
+    };
+  }
+
   return {
     list,
     add(input) {
@@ -170,6 +239,11 @@ export function createGoogleSheetStore({ spreadsheetId, sheetName = 'MasterData'
     },
     completeFollowUp(clientId) {
       const operation = queuedWrite.then(() => completeFollowUp(clientId));
+      queuedWrite = operation.catch(() => {});
+      return operation;
+    },
+    update(clientId, input) {
+      const operation = queuedWrite.then(() => updateClient(clientId, input));
       queuedWrite = operation.catch(() => {});
       return operation;
     },

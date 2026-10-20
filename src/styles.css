@@ -191,6 +191,11 @@ tr:hover .row-arrow, .followup-open:hover .row-arrow { transform: translateX(2px
 @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
 .drawer { display: flex; flex-direction: column; width: min(620px, 100%); height: 100%; background: #fff; box-shadow: -12px 0 36px rgb(34 50 39 / 12%); animation: slide-in .24s ease both; }
 .detail-drawer { width: min(500px, 100%); padding-bottom: 20px; }
+.detail-actions { display: flex; align-items: center; gap: 7px; }
+.detail-actions .button { min-height: 34px; padding: 0 9px; font-size: 10px; }
+.edit-client-form { min-height: 0; flex: 1; overflow-y: auto; padding: 0 26px 24px; }
+.detail-edit-grid { padding-top: 15px; }
+.field-hint { color: #89948c; font-size: 9px; font-weight: 400; }
 @keyframes slide-in { from { transform: translateX(22px); opacity: .7; } to { transform: translateX(0); opacity: 1; } }
 .drawer-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 15px; padding: 25px 26px 20px; border-bottom: 1px solid var(--line); }
 .drawer-header h2 { margin: 7px 0 0; color: #2c4034; font-family: 'DM Serif Display', Georgia, serif; font-size: 27px; font-weight: 400; letter-spacing: 0; }
@@ -300,6 +305,9 @@ tr:hover .row-arrow, .followup-open:hover .row-arrow { transform: translateX(2px
   .detail-status { padding: 16px 18px; }
   .detail-grid { padding-right: 18px; padding-left: 18px; }
   .detail-notes { margin-right: 18px; margin-left: 18px; }
+  .edit-client-form { padding: 0 17px 18px; }
+  .detail-actions { gap: 5px; }
+  .detail-actions .button { min-height: 32px; padding: 0 7px; }
 }
 @media (max-width: 430px) {
   .form-grid { grid-template-columns: 1fr; }

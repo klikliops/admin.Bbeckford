@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import {
   ArrowRight,
   ArrowDownAZ,
@@ -87,6 +87,101 @@ function Status({ value }) {
       ? 'caution'
       : 'neutral';
   return <span className={`status status-${tone}`}><i />{value || 'Not set'}</span>;
+}
+
+function FilterMenu({ label, value, options, icon: Icon, onChange }) {
+  const [open, setOpen] = useState(false);
+  const menuId = useId();
+  const rootRef = useRef(null);
+  const triggerRef = useRef(null);
+  const selectedOption = options.find((option) => option.value === value) || options[0];
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const closeOnOutsideClick = (event) => {
+      if (!rootRef.current?.contains(event.target)) setOpen(false);
+    };
+    const closeOnEscape = (event) => {
+      if (event.key !== 'Escape') return;
+      setOpen(false);
+      triggerRef.current?.focus();
+    };
+    document.addEventListener('pointerdown', closeOnOutsideClick);
+    document.addEventListener('keydown', closeOnEscape);
+    return () => {
+      document.removeEventListener('pointerdown', closeOnOutsideClick);
+      document.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [open]);
+
+  function focusOption(position) {
+    const menuItems = rootRef.current?.querySelectorAll('.filter-option');
+    menuItems?.[position]?.focus();
+  }
+
+  function onTriggerKeyDown(event) {
+    if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+    event.preventDefault();
+    setOpen(true);
+    window.requestAnimationFrame(() => {
+      const selectedIndex = options.findIndex((option) => option.value === value);
+      focusOption(selectedIndex < 0 ? 0 : selectedIndex);
+    });
+  }
+
+  function onOptionKeyDown(event, index) {
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      focusOption((index + 1) % options.length);
+    } else if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      focusOption((index - 1 + options.length) % options.length);
+    } else if (event.key === 'Home') {
+      event.preventDefault();
+      focusOption(0);
+    } else if (event.key === 'End') {
+      event.preventDefault();
+      focusOption(options.length - 1);
+    }
+  }
+
+  return (
+    <div className="filter-control filter-menu" ref={rootRef}>
+      <button
+        className="filter-trigger"
+        type="button"
+        ref={triggerRef}
+        aria-label={`${label}: ${selectedOption.label}`}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-controls={menuId}
+        onClick={() => setOpen((current) => !current)}
+        onKeyDown={onTriggerKeyDown}
+      >
+        <Icon size={15} />
+        <span>{selectedOption.label}</span>
+        <ChevronDown size={14} />
+      </button>
+      {open && <div className="filter-menu-popover" id={menuId} role="menu" aria-label={label}>
+        {options.map((option, index) => <button
+          className="filter-option"
+          type="button"
+          role="menuitemradio"
+          aria-checked={option.value === value}
+          key={option.value}
+          onClick={() => {
+            onChange(option.value);
+            setOpen(false);
+            triggerRef.current?.focus();
+          }}
+          onKeyDown={(event) => onOptionKeyDown(event, index)}
+        >
+          <span>{option.label}</span>
+          {option.value === value && <Check size={14} />}
+        </button>)}
+      </div>}
+    </div>
+  );
 }
 
 function ClientForm({ onClose, onCreated }) {
@@ -255,9 +350,9 @@ function ClientList({ clients, search, onSearch, onSelectClient }) {
       <section className="surface roster-surface">
         <div className="roster-toolbar">
           <label className="search-box"><Search size={17} /><input value={search} onChange={(event) => onSearch(event.target.value)} placeholder="Search name, email or ID" aria-label="Search clients" />{search && <button className="clear-search" onClick={() => onSearch('')} aria-label="Clear search"><X size={15} /></button>}</label>
-          <div className="filter-control"><SlidersHorizontal size={15} /><select value={frequency} onChange={(event) => setFrequency(event.target.value)} aria-label="Filter by meeting frequency"><option>All frequencies</option>{frequencies.map((item) => <option key={item}>{item}</option>)}</select><ChevronDown size={14} /></div>
-          <div className="filter-control"><CreditCard size={15} /><select value={payment} onChange={(event) => setPayment(event.target.value)} aria-label="Filter by payment status"><option>All payment statuses</option><option>Pending</option><option>Up to Date</option></select><ChevronDown size={14} /></div>
-          <div className="filter-control"><ArrowDownAZ size={15} /><select value={sortOrder} onChange={(event) => setSortOrder(event.target.value)} aria-label="Sort clients"><option value="name">Name A-Z</option><option value="clientId">CL number</option></select><ChevronDown size={14} /></div>
+          <FilterMenu label="Meeting frequency" value={frequency} onChange={setFrequency} icon={SlidersHorizontal} options={[{ value: 'All frequencies', label: 'All frequencies' }, ...frequencies.map((item) => ({ value: item, label: item }))]} />
+          <FilterMenu label="Payment status" value={payment} onChange={setPayment} icon={CreditCard} options={[{ value: 'All payment statuses', label: 'All payment statuses' }, { value: 'Pending', label: 'Pending' }, { value: 'Up to Date', label: 'Up to Date' }]} />
+          <FilterMenu label="Sort clients" value={sortOrder} onChange={setSortOrder} icon={ArrowDownAZ} options={[{ value: 'name', label: 'Name A-Z' }, { value: 'clientId', label: 'CL number' }]} />
         </div>
         <div className="table-scroll"><table className="client-table"><thead><tr><th>Client</th><th>Meeting frequency</th><th>Next contact</th><th>Payment</th><th aria-label="Open client" /></tr></thead><tbody>
           {visibleClients.map((client) => <tr key={client.id || client.email} onClick={() => onSelectClient(client)} tabIndex={0} onKeyDown={(event) => event.key === 'Enter' && onSelectClient(client)}><td><div className="client-name-cell"><span className="client-initials">{client.name.split(/\s+/).slice(0, 2).map((part) => part[0]).join('').toUpperCase()}</span><span><strong>{client.name}</strong><small>{client.id} <i /> {client.email || 'No email'}</small></span></div></td><td>{client.frequency || <span className="muted">Not set</span>}</td><td><span className={daysUntil(client.nextContactDate) < 0 ? 'text-overdue' : ''}>{formatDate(client.nextContactDate)}</span></td><td><Status value={client.paymentStatus} /></td><td><ArrowRight size={15} className="row-arrow" /></td></tr>)}

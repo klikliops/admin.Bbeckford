@@ -6,6 +6,8 @@ import {
   ChevronDown,
   Clock3,
   CreditCard,
+  Eye,
+  EyeOff,
   FileSpreadsheet,
   LayoutDashboard,
   LockKeyhole,
@@ -259,6 +261,7 @@ function ClientList({ clients, search, onSearch, onSelectClient }) {
 
 function LoginScreen({ onAuthenticated }) {
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
@@ -290,7 +293,7 @@ function LoginScreen({ onAuthenticated }) {
         <h1>Casework</h1>
         <p>Sign in to your client workspace.</p>
         <form onSubmit={submit}>
-          <label className="field">Workspace password<input autoFocus type="password" value={password} onChange={(event) => setPassword(event.target.value)} required /></label>
+          <label className="field">Workspace password<span className="password-input"><input autoFocus type={showPassword ? 'text' : 'password'} value={password} onChange={(event) => setPassword(event.target.value)} required /><button className="password-toggle" type="button" onClick={() => setShowPassword((visible) => !visible)} aria-label={showPassword ? 'Hide password' : 'Show password'} aria-pressed={showPassword} title={showPassword ? 'Hide password' : 'Show password'}>{showPassword ? <EyeOff size={16} /> : <Eye size={16} />}</button></span></label>
           {error && <div className="form-error" role="alert">{error}</div>}
           <button className="button button-primary" type="submit" disabled={submitting}>{submitting ? 'Signing in…' : 'Sign in'} <ArrowRight size={15} /></button>
         </form>

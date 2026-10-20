@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   ArrowRight,
+  ArrowDownAZ,
   CalendarClock,
   Check,
   ChevronDown,
@@ -232,12 +233,20 @@ function Dashboard({ clients, onShowClients, onSelectClient, now }) {
 function ClientList({ clients, search, onSearch, onSelectClient }) {
   const [frequency, setFrequency] = useState('All frequencies');
   const [payment, setPayment] = useState('All payment statuses');
+  const [sortOrder, setSortOrder] = useState('name');
   const visibleClients = clients.filter((client) => {
     const query = search.trim().toLowerCase();
     const matchesQuery = !query || [client.id, client.name, client.email, client.phone].some((value) => value.toLowerCase().includes(query));
     const matchesFrequency = frequency === 'All frequencies' || client.frequency === frequency;
     const matchesPayment = payment === 'All payment statuses' || client.paymentStatus === payment;
     return matchesQuery && matchesFrequency && matchesPayment;
+  }).sort((left, right) => {
+    if (sortOrder === 'clientId') {
+      const leftNumber = Number(left.id.match(/\d+/)?.[0] || 0);
+      const rightNumber = Number(right.id.match(/\d+/)?.[0] || 0);
+      return leftNumber - rightNumber || left.name.localeCompare(right.name);
+    }
+    return left.name.localeCompare(right.name);
   });
 
   return (
@@ -248,6 +257,7 @@ function ClientList({ clients, search, onSearch, onSelectClient }) {
           <label className="search-box"><Search size={17} /><input value={search} onChange={(event) => onSearch(event.target.value)} placeholder="Search name, email or ID" aria-label="Search clients" />{search && <button className="clear-search" onClick={() => onSearch('')} aria-label="Clear search"><X size={15} /></button>}</label>
           <div className="filter-control"><SlidersHorizontal size={15} /><select value={frequency} onChange={(event) => setFrequency(event.target.value)} aria-label="Filter by meeting frequency"><option>All frequencies</option>{frequencies.map((item) => <option key={item}>{item}</option>)}</select><ChevronDown size={14} /></div>
           <div className="filter-control"><CreditCard size={15} /><select value={payment} onChange={(event) => setPayment(event.target.value)} aria-label="Filter by payment status"><option>All payment statuses</option><option>Pending</option><option>Up to Date</option></select><ChevronDown size={14} /></div>
+          <div className="filter-control"><ArrowDownAZ size={15} /><select value={sortOrder} onChange={(event) => setSortOrder(event.target.value)} aria-label="Sort clients"><option value="name">Name A-Z</option><option value="clientId">CL number</option></select><ChevronDown size={14} /></div>
         </div>
         <div className="table-scroll"><table className="client-table"><thead><tr><th>Client</th><th>Meeting frequency</th><th>Next contact</th><th>Payment</th><th aria-label="Open client" /></tr></thead><tbody>
           {visibleClients.map((client) => <tr key={client.id || client.email} onClick={() => onSelectClient(client)} tabIndex={0} onKeyDown={(event) => event.key === 'Enter' && onSelectClient(client)}><td><div className="client-name-cell"><span className="client-initials">{client.name.split(/\s+/).slice(0, 2).map((part) => part[0]).join('').toUpperCase()}</span><span><strong>{client.name}</strong><small>{client.id} <i /> {client.email || 'No email'}</small></span></div></td><td>{client.frequency || <span className="muted">Not set</span>}</td><td><span className={daysUntil(client.nextContactDate) < 0 ? 'text-overdue' : ''}>{formatDate(client.nextContactDate)}</span></td><td><Status value={client.paymentStatus} /></td><td><ArrowRight size={15} className="row-arrow" /></td></tr>)}

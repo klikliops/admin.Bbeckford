@@ -1,0 +1,8 @@
+node_modules/
+dist/
+*.xlsx
+.env
+.env.*
+!.env.example
+.case-management-*.xlsx
+.roundtrip-*.xlsx

@@ -633,7 +633,7 @@ export default function App() {
     setIntakeOpen(false);
     setPage('clients');
     setSearch(result.client.name);
-    setToast(`${result.client.name} added to MasterData`);
+    setToast(`Submitted: ${result.client.name}`);
   }
 
   async function logout() {

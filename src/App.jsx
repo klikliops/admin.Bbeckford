@@ -480,8 +480,8 @@ function LoginScreen({ onAuthenticated }) {
     <main className="login-screen">
       <section className="login-panel">
         <div className="login-mark"><LockKeyhole size={19} /></div>
-        <span className="eyebrow">CLIENT SERVICES</span>
-        <h1>Casework</h1>
+        <span className="eyebrow">ADMIN PORTAL</span>
+        <h1>BBeckford Law</h1>
         <p>Sign in to your client workspace.</p>
         <form onSubmit={submit}>
           <label className="field">Workspace password<span className="password-input"><input autoFocus type={showPassword ? 'text' : 'password'} value={password} onChange={(event) => setPassword(event.target.value)} required /><button className="password-toggle" type="button" onClick={() => setShowPassword((visible) => !visible)} aria-label={showPassword ? 'Hide password' : 'Show password'} aria-pressed={showPassword} title={showPassword ? 'Hide password' : 'Show password'}>{showPassword ? <EyeOff size={16} /> : <Eye size={16} />}</button></span></label>
@@ -650,7 +650,7 @@ export default function App() {
   return (
     <div className="app-shell">
       <aside className="sidebar">
-        <a className="brand" href="#dashboard" onClick={(event) => { event.preventDefault(); setPage('dashboard'); }}><span className="brand-mark"><span /><span /><span /></span><span className="brand-name">casework<span>CLIENT SERVICES</span></span></a>
+        <a className="brand" href="#dashboard" onClick={(event) => { event.preventDefault(); setPage('dashboard'); }}><span className="brand-mark"><span /><span /><span /></span><span className="brand-name">BBeckford Law<span>ADMIN PORTAL</span></span></a>
         <div className="sidebar-section"><span className="nav-caption">WORKSPACE</span><button className={`nav-item ${page === 'dashboard' ? 'active' : ''}`} onClick={() => setPage('dashboard')}><LayoutDashboard size={18} /><span>Overview</span></button><button className={`nav-item ${page === 'clients' ? 'active' : ''}`} onClick={() => setPage('clients')}><UsersRound size={18} /><span>Clients</span><span className="nav-count">{clients.length}</span></button></div>
         <div className="sidebar-bottom"><div className="workbook-chip"><FileSpreadsheet size={17} /><span><b>MasterData</b><small>{dataSource === 'Google Sheets' ? 'Google Sheets' : 'Excel workbook'}</small></span><span className="live-mark" title="Live data connection" /></div><div className="sidebar-user"><span className="user-avatar">CS</span><span><b>Case services</b><small>{loginRequired ? 'Private workspace' : 'Local workspace'}</small></span><Menu size={17} /></div></div>
       </aside>

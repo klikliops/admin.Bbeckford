@@ -19,12 +19,15 @@ if (production && !useGoogleSheets) {
 if (production && (!process.env.GOOGLE_SHEET_ID || !process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL || !process.env.GOOGLE_PRIVATE_KEY)) {
   throw new Error('Production requires GOOGLE_SHEET_ID, GOOGLE_SERVICE_ACCOUNT_EMAIL, and GOOGLE_PRIVATE_KEY.');
 }
+if (production && !process.env.GOOGLE_COURT_SHEET_ID) {
+  throw new Error('Production requires GOOGLE_COURT_SHEET_ID for the separate court-date spreadsheet.');
+}
 const sourceName = useGoogleSheets ? 'Google Sheets' : 'Excel';
 const store = useGoogleSheets
   ? createGoogleSheetStore({
     spreadsheetId: process.env.GOOGLE_SHEET_ID,
     sheetName: process.env.GOOGLE_SHEET_NAME || 'MasterData',
-    courtSpreadsheetId: process.env.GOOGLE_COURT_SHEET_ID || process.env.GOOGLE_SHEET_ID,
+    courtSpreadsheetId: process.env.GOOGLE_COURT_SHEET_ID,
     courtSheetName: process.env.GOOGLE_COURT_SHEET_NAME || 'COURT DATE LIST',
     serviceAccountEmail: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
     privateKey: process.env.GOOGLE_PRIVATE_KEY,

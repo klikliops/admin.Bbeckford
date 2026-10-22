@@ -24,7 +24,7 @@ const store = useGoogleSheets
   ? createGoogleSheetStore({
     spreadsheetId: process.env.GOOGLE_SHEET_ID,
     sheetName: process.env.GOOGLE_SHEET_NAME || 'MasterData',
-    courtSpreadsheetId: process.env.GOOGLE_COURT_SHEET_ID || '',
+    courtSpreadsheetId: process.env.GOOGLE_COURT_SHEET_ID || process.env.GOOGLE_SHEET_ID,
     courtSheetName: process.env.GOOGLE_COURT_SHEET_NAME || 'COURT DATE LIST',
     serviceAccountEmail: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
     privateKey: process.env.GOOGLE_PRIVATE_KEY,

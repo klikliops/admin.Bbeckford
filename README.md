@@ -38,10 +38,10 @@ The `.gitignore` excludes Excel workbooks, dependencies, build output, and envir
 
 ## Prepare Google Sheets
 
-1. Upload the client tracker to Google Drive and convert it to a Google Sheet. Keep the `MasterData` tab and its header row.
-2. Upload `Prototype of Reports.xlsx` separately and convert it to a second Google Sheet. Rename the court tab to `COURT DATE LIST` (no trailing space) and keep its header row.
-3. In Google Cloud, enable the Google Sheets API and create a service account. Share both Google Sheets with that account and grant Editor access.
-4. Copy each spreadsheet ID from its Google Sheets URL. Keep the service-account key private.
+1. Convert the client tracker to a Google Sheet and keep its `MasterData` tab and header row.
+2. Import or copy the `COURT DATE LIST` tab from `Prototype of Reports.xlsx` into that same Google Sheet. Use the exact tab name `COURT DATE LIST` without a trailing space and keep its header row.
+3. In Google Cloud, enable the Google Sheets API and create a service account. Share the Google Sheet with that account and grant Editor access.
+4. Copy the spreadsheet ID from the Google Sheets URL. Keep the service-account key private.
 
 ## Deploy on Vercel
 
@@ -52,11 +52,12 @@ The `.gitignore` excludes Excel workbooks, dependencies, build output, and envir
 	- `GOOGLE_SHEET_NAME` = `MasterData`
 	- `GOOGLE_SERVICE_ACCOUNT_EMAIL` = the service-account email
 	- `GOOGLE_PRIVATE_KEY` = the service-account private key
-	- `GOOGLE_COURT_SHEET_ID` = the court-date spreadsheet ID
 	- `GOOGLE_COURT_SHEET_NAME` = `COURT DATE LIST`
 	- `APP_PASSWORD` = a strong private workspace password
 	- `SESSION_SECRET` = a separate random secret used to sign sessions
 3. Redeploy after saving the environment variables. The app requires sign-in and refuses to serve the bundled Excel workbook in production.
+
+`GOOGLE_COURT_SHEET_ID` is optional; if omitted, court dates use `GOOGLE_SHEET_ID`. Set it only if the court tab is in a different spreadsheet.
 
 Vercel redeploys from GitHub pushes. The app checks client and court data every 20 seconds and when a tab regains focus. New intakes append to `MasterData`; staff edits appear after the sheet is saved. Court dates are matched to clients by normalized name; a reschedule date takes precedence over the original court date. Staff also need their own Google Sheet permissions.
 

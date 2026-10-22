@@ -9,6 +9,7 @@ import { createWorkbookStore } from './workbook.js';
 
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const workbookPath = resolve(process.env.WORKBOOK_PATH || resolve(root, "Prototype of Client's Tracker .xlsx"));
+const courtWorkbookPath = resolve(process.env.COURT_WORKBOOK_PATH || resolve(root, 'Prototype of Reports.xlsx'));
 const port = Number(process.env.PORT || 3001);
 const production = process.env.NODE_ENV === 'production';
 const useGoogleSheets = process.env.DATA_SOURCE === 'google-sheets' || Boolean(process.env.GOOGLE_SHEET_ID);
@@ -23,10 +24,12 @@ const store = useGoogleSheets
   ? createGoogleSheetStore({
     spreadsheetId: process.env.GOOGLE_SHEET_ID,
     sheetName: process.env.GOOGLE_SHEET_NAME || 'MasterData',
+    courtSpreadsheetId: process.env.GOOGLE_COURT_SHEET_ID || '',
+    courtSheetName: process.env.GOOGLE_COURT_SHEET_NAME || 'COURT DATE LIST',
     serviceAccountEmail: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
     privateKey: process.env.GOOGLE_PRIVATE_KEY,
   })
-  : createWorkbookStore(workbookPath);
+  : createWorkbookStore(workbookPath, courtWorkbookPath);
 const sessionAuth = createSessionAuth({
   enabled: production,
   password: process.env.APP_PASSWORD,
@@ -91,6 +94,16 @@ app.get('/api/clients', async (_request, response, next) => {
     const clients = await store.list();
     const modifiedAt = useGoogleSheets ? new Date().toISOString() : (await stat(workbookPath)).mtime.toISOString();
     response.json({ clients, modifiedAt, source: sourceName });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get('/api/court-dates', async (_request, response, next) => {
+  try {
+    const courtDates = await store.listCourtDates();
+    const modifiedAt = useGoogleSheets ? new Date().toISOString() : (await stat(courtWorkbookPath)).mtime.toISOString();
+    response.json({ courtDates, modifiedAt, source: sourceName });
   } catch (error) {
     next(error);
   }

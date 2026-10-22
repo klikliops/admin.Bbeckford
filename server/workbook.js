@@ -89,6 +89,72 @@ export async function readClients(filePath) {
   return clients.sort((left, right) => left.name.localeCompare(right.name));
 }
 
+function courtDateText(cell) {
+  if (!cell || cell.value == null) return '';
+  if (cell.value instanceof Date) return cell.value.toISOString().slice(0, 10);
+  if (typeof cell.value === 'number' && cell.value > 20000 && cell.value < 80000) {
+    return new Date(Date.UTC(1899, 11, 30) + cell.value * 86400000).toISOString().slice(0, 10);
+  }
+  const text = String(cell.text || cell.value).trim();
+  const isoDate = text.match(/\b\d{4}-\d{2}-\d{2}\b/);
+  if (isoDate) return isoDate[0];
+  const readableDate = text.match(/[A-Za-z]+ \d{1,2}, \d{4}/);
+  if (readableDate) return new Date(readableDate[0]).toISOString().slice(0, 10);
+  return '';
+}
+
+function headerColumns(sheet) {
+  const columns = new Map();
+  sheet.getRow(1).eachCell({ includeEmpty: false }, (cell, column) => {
+    columns.set(normalize(cellText(cell)), column);
+  });
+  return columns;
+}
+
+export async function readCourtDates(filePath, sheetName = 'COURT DATE LIST ') {
+  const workbook = await loadWorkbook(filePath);
+  const sheet = workbook.worksheets.find((item) => normalize(item.name) === normalize(sheetName));
+  if (!sheet) throw new Error(`The workbook must contain a ${sheetName.trim()} sheet.`);
+  const columns = headerColumns(sheet);
+  const column = (label) => columns.get(normalize(label)) || 0;
+  const exactColumn = (label) => {
+    let result = 0;
+    sheet.getRow(1).eachCell({ includeEmpty: false }, (cell, columnIndex) => {
+      if (cellText(cell).trim() === label) result = columnIndex;
+    });
+    return result;
+  };
+  const noteColumn = exactColumn('Note');
+  const additionalNoteColumn = exactColumn('NOTE');
+  const result = [];
+
+  for (let rowNumber = 2; rowNumber <= sheet.actualRowCount; rowNumber += 1) {
+    const row = sheet.getRow(rowNumber);
+    const clientName = cellText(row.getCell(column('NAME')));
+    if (!clientName) continue;
+    const courtDate = courtDateText(row.getCell(column('COURT DATE')));
+    const rescheduleDate = courtDateText(row.getCell(column('RESCHEDULE DATE')));
+    const date = rescheduleDate || courtDate;
+    if (!date) continue;
+    result.push({
+      id: `${rowNumber}`,
+      clientName,
+      date,
+      originalDate: courtDate,
+      rescheduleDate,
+      status: cellText(row.getCell(column('STATUS'))),
+      country: cellText(row.getCell(column('Country'))),
+      alienNumber: cellText(row.getCell(column('ALIEN NUMBER'))),
+      time: cellText(row.getCell(column('TIME'))),
+      address: cellText(row.getCell(column('ADDRESS')) || row.getCell(column('COURT ADDRESS'))),
+      judge: cellText(row.getCell(column('JUDGE')) || row.getCell(column('JUDGE '))),
+      note: cellText(row.getCell(noteColumn)),
+      additionalNote: cellText(row.getCell(additionalNoteColumn)),
+    });
+  }
+  return result;
+}
+
 function columnName(index) {
   let name = '';
   while (index > 0) {
@@ -470,9 +536,10 @@ async function completeFollowUpInWorkbook(filePath, clientId) {
   return (await readClients(filePath)).find((client) => client.id === clientId);
 }
 
-export function createWorkbookStore(filePath) {
+export function createWorkbookStore(filePath, courtWorkbookPath = filePath) {
   return {
     list: () => readClients(filePath),
+    listCourtDates: () => readCourtDates(courtWorkbookPath),
     add: (input) => {
       const operation = writeQueue.then(() => addClientToWorkbook(filePath, input));
       writeQueue = operation.catch(() => {});

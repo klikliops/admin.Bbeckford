@@ -63,6 +63,14 @@ function daysUntil(value, today = centralDateKey()) {
   return Math.round((date - new Date(`${today}T00:00:00`)) / 86400000);
 }
 
+function normalizeClientName(value) {
+  return String(value || '')
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '');
+}
+
 function greeting(now) {
   const hour = Number(new Intl.DateTimeFormat('en-US', { timeZone: CENTRAL_TIME_ZONE, hour: 'numeric', hourCycle: 'h23' }).format(now));
   return hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
@@ -283,7 +291,7 @@ function editValues(client) {
   };
 }
 
-function ClientDetails({ client, onClose, onUpdate }) {
+function ClientDetails({ client, courtDates, onClose, onUpdate }) {
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -317,6 +325,9 @@ function ClientDetails({ client, onClose, onUpdate }) {
 
   const frequencyOptions = [...new Set([form.frequency, ...frequencies].filter(Boolean))];
   const outcomeOptions = [...new Set([form.outcome, 'Responsive', 'Unresponsive'].filter(Boolean))];
+  const clientCourtDates = courtDates
+    .filter((event) => normalizeClientName(event.clientName) === normalizeClientName(client.name))
+    .sort((left, right) => left.date.localeCompare(right.date));
   return (
     <div className="overlay" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
       <section className="drawer detail-drawer" role="dialog" aria-modal="true" aria-labelledby="client-name">
@@ -360,6 +371,16 @@ function ClientDetails({ client, onClose, onUpdate }) {
             <div><dt>Last date with attorney</dt><dd>{formatDate(client.lastAttorneyDate)}</dd></div>
             <div><dt>Payment status</dt><dd>{client.paymentStatus || '—'}</dd></div>
           </dl>
+          <section className="detail-court-dates">
+            <div className="detail-court-heading"><h3>Court dates</h3><span>{clientCourtDates.length}</span></div>
+            {clientCourtDates.length ? <div className="court-date-list">{clientCourtDates.map((event) => <article className="court-date-item" key={event.id}>
+              <div className="court-date-main"><CalendarDays size={16} /><div><strong>{formatDate(event.date)}</strong><span>{event.time || 'Time not listed'}{event.status ? ` · ${event.status}` : ''}</span></div></div>
+              {event.address && <p>{event.address}</p>}
+              {(event.judge || event.country || event.alienNumber) && <small>{[event.judge && `Judge ${event.judge}`, event.country, event.alienNumber && `A# ${event.alienNumber}`].filter(Boolean).join(' · ')}</small>}
+              {event.note && <small>{event.note}</small>}
+              {event.additionalNote && <small>{event.additionalNote}</small>}
+            </article>)}</div> : <p className="court-date-empty">No court dates on file.</p>}
+          </section>
           <section className="detail-notes"><h3>Notes</h3><p>{client.notes || 'No notes recorded.'}</p></section>
         </>}
       </section>
@@ -367,7 +388,7 @@ function ClientDetails({ client, onClose, onUpdate }) {
   );
 }
 
-function Dashboard({ clients, onShowClients, onSelectClient, onCompleteFollowUp, now }) {
+function Dashboard({ clients, courtDates, onShowClients, onSelectClient, onCompleteFollowUp, now }) {
   const today = centralDateKey(now);
   const dueClients = useMemo(() => clients
     .map((client) => ({ ...client, dueIn: daysUntil(client.nextContactDate, today) }))
@@ -376,6 +397,12 @@ function Dashboard({ clients, onShowClients, onSelectClient, onCompleteFollowUp,
   const dueSoon = dueClients.filter((client) => client.dueIn <= 7).length;
   const pendingPayments = clients.filter((client) => client.paymentStatus.toLowerCase() === 'pending').length;
   const nextFollowUp = dueClients.find((client) => client.dueIn >= 0) || null;
+  const rosterNames = new Set(clients.map((client) => normalizeClientName(client.name)));
+  const nextCourtDate = courtDates
+    .filter((event) => rosterNames.has(normalizeClientName(event.clientName)) && event.status.toLowerCase() !== 'done')
+    .map((event) => ({ ...event, daysUntil: daysUntil(event.date, today) }))
+    .filter((event) => event.daysUntil !== null && event.daysUntil >= 0)
+    .sort((left, right) => left.daysUntil - right.daysUntil)[0] || null;
   const frequencyCounts = frequencies.map((frequency) => ({ frequency, count: clients.filter((client) => client.frequency.toLowerCase() === frequency.toLowerCase()).length }));
   const maxFrequency = Math.max(...frequencyCounts.map((item) => item.count), 1);
   const nextClients = dueClients.slice(0, 6);
@@ -395,6 +422,7 @@ function Dashboard({ clients, onShowClients, onSelectClient, onCompleteFollowUp,
         <Metric label="Upcoming this week" value={dueSoon} note="Scheduled in the next 7 days" tone="amber" icon={CalendarClock} />
         <Metric label="Payments pending" value={pendingPayments} note={`${clients.length ? Math.round((pendingPayments / clients.length) * 100) : 0}% of client roster`} tone="rose" icon={CreditCard} />
         <Metric label="Next follow-up" value={nextFollowUp ? formatDate(nextFollowUp.nextContactDate, { month: 'short', day: 'numeric' }) : '—'} note={nextFollowUp?.name || 'No upcoming follow-up'} tone="blue" icon={CalendarClock} />
+        <Metric label="Next court date" value={nextCourtDate ? formatDate(nextCourtDate.date, { month: 'short', day: 'numeric' }) : '—'} note={nextCourtDate?.clientName || 'No upcoming court date'} tone="green" icon={CalendarDays} />
       </div>
       <div className="dashboard-grid">
         <section className="surface followup-surface">
@@ -510,6 +538,7 @@ function CentralClock() {
 export default function App() {
   const [page, setPage] = useState('dashboard');
   const [clients, setClients] = useState([]);
+  const [courtDates, setCourtDates] = useState([]);
   const [search, setSearch] = useState('');
   const [selectedClient, setSelectedClient] = useState(null);
   const [intakeOpen, setIntakeOpen] = useState(false);
@@ -546,6 +575,16 @@ export default function App() {
   useEffect(() => {
     if (authStatus !== 'authenticated') return undefined;
     let active = true;
+    const loadCourtDates = async () => {
+      try {
+        const response = await fetch('/api/court-dates');
+        if (!response.ok) return;
+        const result = await response.json();
+        if (active) setCourtDates(result.courtDates || []);
+      } catch {
+        if (active) setCourtDates([]);
+      }
+    };
     const load = async () => {
       try {
         const response = await fetch('/api/clients');
@@ -559,6 +598,8 @@ export default function App() {
         }
       } catch (error) {
         if (active) setLoadError(error.message);
+      } finally {
+        loadCourtDates();
       }
     };
     load();
@@ -583,6 +624,11 @@ export default function App() {
       const response = await fetch('/api/clients');
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || 'Could not refresh client data.');
+      const courtResponse = await fetch('/api/court-dates');
+      if (courtResponse.ok) {
+        const courtResult = await courtResponse.json();
+        setCourtDates(courtResult.courtDates || []);
+      }
       setClients(result.clients);
       setLastUpdated(result.modifiedAt);
       setDataSource(result.source || 'Excel');
@@ -659,13 +705,13 @@ export default function App() {
         <div className="page-content">
           {loadError && <div className="load-error" role="alert"><span>{loadError}</span><button onClick={refreshWorkbook}>Retry <RefreshCw size={14} /></button></div>}
           {page === 'dashboard'
-            ? <Dashboard clients={clients} now={new Date()} onShowClients={() => setPage('clients')} onSelectClient={setSelectedClient} onCompleteFollowUp={completeFollowUp} />
+            ? <Dashboard clients={clients} courtDates={courtDates} now={new Date()} onShowClients={() => setPage('clients')} onSelectClient={setSelectedClient} onCompleteFollowUp={completeFollowUp} />
             : <ClientList clients={clients} search={search} onSearch={setSearch} onSelectClient={setSelectedClient} />}
           <footer className="page-footer"><span><i className="sync-dot" /> {dataSource} connection active</span><span>{dataSource === 'Google Sheets' ? 'Sheet checked every 20 seconds' : 'Workbook checked every 20 seconds'}</span></footer>
         </div>
       </main>
       {intakeOpen && <ClientForm onClose={() => setIntakeOpen(false)} onCreated={createdClient} />}
-      {selectedClient && <ClientDetails client={selectedClient} onClose={() => setSelectedClient(null)} onUpdate={updateClient} />}
+      {selectedClient && <ClientDetails client={selectedClient} courtDates={courtDates} onClose={() => setSelectedClient(null)} onUpdate={updateClient} />}
       {toast && <div className="toast"><span><Check size={15} /></span>{toast}</div>}
     </div>
   );

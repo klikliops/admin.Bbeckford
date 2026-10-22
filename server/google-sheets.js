@@ -34,7 +34,34 @@ function mappedClient(headers, values) {
   return client;
 }
 
-export function createGoogleSheetStore({ spreadsheetId, sheetName = 'MasterData', serviceAccountEmail, privateKey }, api = google) {
+function googleDate(value) {
+  if (typeof value === 'number' && value > 20000 && value < 80000) {
+    return new Date(Date.UTC(1899, 11, 30) + value * 86400000).toISOString().slice(0, 10);
+  }
+  const text = String(value ?? '').trim();
+  const isoDate = text.match(/\b\d{4}-\d{2}-\d{2}\b/);
+  if (isoDate) return isoDate[0];
+  const readableDate = text.match(/[A-Za-z]+ \d{1,2}, \d{4}/);
+  return readableDate ? new Date(readableDate[0]).toISOString().slice(0, 10) : '';
+}
+
+function googleTime(value) {
+  if (typeof value !== 'number' || value < 0 || value >= 1) return String(value ?? '').trim();
+  const totalMinutes = Math.round(value * 1440) % 1440;
+  const hour24 = Math.floor(totalMinutes / 60);
+  const minute = String(totalMinutes % 60).padStart(2, '0');
+  const hour12 = hour24 % 12 || 12;
+  return `${hour12}:${minute} ${hour24 < 12 ? 'AM' : 'PM'}`;
+}
+
+export function createGoogleSheetStore({
+  spreadsheetId,
+  sheetName = 'MasterData',
+  courtSpreadsheetId = '',
+  courtSheetName = 'COURT DATE LIST',
+  serviceAccountEmail,
+  privateKey,
+}, api = google) {
   const quotedSheet = `'${sheetName.replaceAll("'", "''")}'`;
   const range = `${quotedSheet}!A:P`;
   let queuedWrite = Promise.resolve();
@@ -70,6 +97,52 @@ export function createGoogleSheetStore({ spreadsheetId, sheetName = 'MasterData'
       .map((row) => mappedClient(headers, row))
       .filter((client) => client.name)
       .sort((left, right) => left.name.localeCompare(right.name));
+  }
+
+  async function listCourtDates() {
+    if (!courtSpreadsheetId) return [];
+    const sheets = getSheetsClient();
+    const response = await sheets.spreadsheets.values.get({
+      spreadsheetId: courtSpreadsheetId,
+      range: `'${courtSheetName.replaceAll("'", "''")}'!B:L`,
+      valueRenderOption: 'UNFORMATTED_VALUE',
+      dateTimeRenderOption: 'SERIAL_NUMBER',
+    });
+    const values = response.data.values || [];
+    if (!values.length) return [];
+    const headers = values[0].map((header) => normalize(header));
+    const index = (label) => headers.indexOf(normalize(label));
+    const nameIndex = index('NAME');
+    const courtDateIndex = index('COURT DATE');
+    const rescheduleIndex = index('RESCHEDULE DATE');
+    const noteIndex = headers.findIndex((header) => header.trim() === 'Note');
+    const additionalNoteIndex = headers.findIndex((header) => header.trim() === 'NOTE');
+    const records = [];
+    for (let rowIndex = 1; rowIndex < values.length; rowIndex += 1) {
+      const row = values[rowIndex];
+      const clientName = String(row[nameIndex] ?? '').trim();
+      if (!clientName) continue;
+      const courtDate = googleDate(row[courtDateIndex]);
+      const rescheduleDate = googleDate(row[rescheduleIndex]);
+      const date = rescheduleDate || courtDate;
+      if (!date) continue;
+      records.push({
+        id: String(rowIndex + 1),
+        clientName,
+        date,
+        originalDate: courtDate,
+        rescheduleDate,
+        note: String(row[noteIndex] ?? '').trim(),
+        additionalNote: String(row[additionalNoteIndex] ?? '').trim(),
+        country: String(row[index('COUNTRY')] ?? '').trim(),
+        alienNumber: String(row[index('ALIEN NUMBER')] ?? '').trim(),
+        time: googleTime(row[index('TIME')]),
+        address: String(row[index('ADDRESS')] ?? row[index('COURT ADDRESS')] ?? '').trim(),
+        judge: String(row[index('JUDGE')] ?? '').trim(),
+        status: String(row[index('STATUS')] ?? '').trim(),
+      });
+    }
+    return records;
   }
 
   async function appendClient(input) {
@@ -232,6 +305,7 @@ export function createGoogleSheetStore({ spreadsheetId, sheetName = 'MasterData'
 
   return {
     list,
+    listCourtDates,
     add(input) {
       const operation = queuedWrite.then(() => appendClient(input));
       queuedWrite = operation.catch(() => {});

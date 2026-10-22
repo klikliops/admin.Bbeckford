@@ -81,7 +81,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .page-subtitle { margin: 7px 0 0; color: #7b877f; font-size: 13px; }
 @keyframes appear { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
 
-.metric-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 13px; animation: appear .42s .04s ease both; }
+.metric-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 13px; animation: appear .42s .04s ease both; }
 .metric { min-width: 0; min-height: 133px; padding: 17px 18px 15px; border: 1px solid var(--line); border-radius: 6px; background: #fff; }
 .metric-top { display: flex; align-items: center; justify-content: space-between; color: #79867d; font-size: 11px; font-weight: 600; }
 .metric-top svg { color: var(--tone); }
@@ -225,6 +225,19 @@ tr:hover .row-arrow, .followup-open:hover .row-arrow { transform: translateX(2px
 .detail-notes { margin: 19px 26px 0; padding: 15px; border-left: 3px solid #d0dfd1; background: #f6f8f5; }
 .detail-notes h3 { margin: 0 0 8px; color: #52655a; font-size: 10px; }
 .detail-notes p { margin: 0; color: #65756a; font-size: 11px; line-height: 1.65; white-space: pre-wrap; }
+.detail-court-dates { margin: 18px 26px 0; }
+.detail-court-heading { display: flex; align-items: center; justify-content: space-between; padding-bottom: 9px; border-bottom: 1px solid #edf0ed; }
+.detail-court-heading h3 { margin: 0; color: #52655a; font-size: 11px; }
+.detail-court-heading > span { display: grid; min-width: 21px; height: 21px; place-items: center; border-radius: 11px; background: #eef3ee; color: #5e7664; font-size: 9px; font-weight: 700; }
+.court-date-list { display: grid; }
+.court-date-item { display: grid; gap: 6px; padding: 11px 0; border-bottom: 1px solid #edf0ed; }
+.court-date-main { display: flex; align-items: flex-start; gap: 8px; color: #62806a; }
+.court-date-main > div { display: grid; gap: 3px; }
+.court-date-main strong { color: #35483c; font-size: 11px; }
+.court-date-main span, .court-date-item small { color: #78867d; font-size: 9px; line-height: 1.5; }
+.court-date-item p { margin: 0 0 0 24px; color: #596a5f; font-size: 10px; line-height: 1.5; }
+.court-date-item small { margin-left: 24px; }
+.court-date-empty { margin: 11px 0 0; color: #879289; font-size: 10px; }
 .toast { position: fixed; right: 24px; bottom: 22px; z-index: 20; display: flex; align-items: center; gap: 10px; padding: 11px 15px 11px 11px; border: 1px solid #dce7dd; border-radius: 5px; background: #fff; box-shadow: 0 8px 25px rgb(32 50 37 / 11%); color: #46624e; font-size: 11px; animation: appear .2s ease both; }
 .toast > span { display: grid; width: 22px; height: 22px; place-items: center; border-radius: 50%; background: #e8f1e9; color: #51805b; }
 .login-screen { display: grid; min-height: 100vh; place-items: center; padding: 24px; background: radial-gradient(ellipse at 16% 12%, #e5eee4 0, transparent 36%), radial-gradient(ellipse at 90% 86%, #f3e6dc 0, transparent 32%), #f4f6f3; }
@@ -304,7 +317,7 @@ tr:hover .row-arrow, .followup-open:hover .row-arrow { transform: translateX(2px
   .form-footer { margin-right: -17px; margin-left: -17px; padding-right: 17px; padding-left: 17px; }
   .detail-status { padding: 16px 18px; }
   .detail-grid { padding-right: 18px; padding-left: 18px; }
-  .detail-notes { margin-right: 18px; margin-left: 18px; }
+  .detail-notes, .detail-court-dates { margin-right: 18px; margin-left: 18px; }
   .edit-client-form { padding: 0 17px 18px; }
   .detail-actions { gap: 5px; }
   .detail-actions .button { min-height: 32px; padding: 0 7px; }
